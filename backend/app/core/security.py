@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Dict
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -24,14 +24,15 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 # ── Token creation ────────────────────────────────────────────
 
-def create_access_token(subject: dict, expires_delta: timedelta | None = None) -> str:
+def create_access_token(data: Dict[str, Any], expires_delta: timedelta | None = None) -> str:
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     payload = {
-        "sub": subject["email"],   # email
-        "role": subject["role"],   # 🔥 role added
+        "sub": data["email"],
+        "role": data["role"],
+        "type": "access",  # explicit token type
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -41,9 +42,27 @@ def create_access_token(subject: dict, expires_delta: timedelta | None = None) -
 
 # ── Token verification ────────────────────────────────────────
 
-def decode_token(token: str) -> dict:
+def decode_token(token: str) -> Dict[str, Any]:
     try:
-        return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+
+        # Validate structure
+        email = payload.get("sub")
+        role = payload.get("role")
+        token_type = payload.get("type")
+
+        if not email or not role or token_type != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token payload",
+            )
+
+        return payload
+
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,7 +75,7 @@ def decode_token(token: str) -> dict:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-) -> dict:
+) -> Dict[str, Any]:
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,6 +86,17 @@ async def get_current_user(
     payload = decode_token(credentials.credentials)
 
     return {
-        "email": payload.get("sub"),
-        "role": payload.get("role"),
+        "email": payload["sub"],
+        "role": payload["role"],
     }
+
+
+# ── Admin dependency (RBAC) ───────────────────────────────────
+
+def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if user["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return user

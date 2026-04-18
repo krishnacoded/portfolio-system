@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast, { Toaster } from 'react-hot-toast'
 import api from '../utils/api'
-import { useNavigate } from "react-router-dom";
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants & helpers
@@ -272,14 +272,14 @@ function LoginScreen({ onLogin }) {
       let res
 
       if (isSignup) {
-        // 🔥 SIGNUP
+        // SIGNUP
         res = await api.post('/auth/signup', {
           email,
           password,
         })
         res = res.data
       } else {
-        // 🔥 LOGIN
+        //  LOGIN
         res = await api.post('/auth/login', {
           email,
           password,
@@ -287,17 +287,17 @@ function LoginScreen({ onLogin }) {
         res = res.data
       }
 
-      // ✅ Save token
+      //  Save token
       saveToken(res.access_token)
 
-      // ✅ Enter dashboard
+      //  Enter dashboard
       onLogin()
 
       toast.success(
         isSignup ? 'Account created successfully 🎉' : 'Welcome back, Admin.'
       )
     } catch (err) {
-      const status = err.response?.status
+      const status = err?.message?.includes("Session") ? 401 : err.response?.status
 
       if (status === 401) {
         setError('Invalid email or password.')

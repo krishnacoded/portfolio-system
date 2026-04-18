@@ -5,41 +5,63 @@ from app.core.database import get_db
 from app.core.redis_client import rate_limit_check
 from app.schemas.contact import ContactCreate, ContactResponse, SuccessResponse
 from app.services.contact_service import ContactService
-from app.core.mailer import send_contact_email  # 🔥 added
+from app.core.mailer import send_contact_email
 
 router = APIRouter(prefix="/contact", tags=["Contact"])
 
 # Rate-limit constants
-RATE_LIMIT = 5        # max submissions
-RATE_WINDOW = 60      # per 60 seconds
+RATE_LIMIT = 5
+RATE_WINDOW = 60
 
 
-async def _check_rate_limit(request: Request) -> None:
-    """Reject requests that exceed the per-IP submission limit."""
-    client_ip = request.headers.get(
+# ──────────────────────────────────────────────
+# Helper: Extract client IP
+# ──────────────────────────────────────────────
+def _get_client_ip(request: Request) -> str:
+    ip = request.headers.get(
         "X-Forwarded-For",
         request.client.host if request.client else "unknown"
     )
-    client_ip = client_ip.split(",")[0].strip()
+    return ip.split(",")[0].strip()
+
+
+# ──────────────────────────────────────────────
+# Rate limiting
+# ──────────────────────────────────────────────
+async def _check_rate_limit(request: Request) -> None:
+    client_ip = _get_client_ip(request)
     key = f"rl:contact:{client_ip}"
 
     try:
         allowed, remaining = await rate_limit_check(key, RATE_LIMIT, RATE_WINDOW)
     except Exception:
-        # Redis unavailable — fail open
-        return
+        return  # fail-open
 
     if not allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many requests. You may submit {RATE_LIMIT} messages per minute. Please wait.",
+            detail=f"Too many requests. Max {RATE_LIMIT} per minute.",
             headers={
                 "Retry-After": str(RATE_WINDOW),
-                "X-RateLimit-Remaining": "0"
+                "X-RateLimit-Remaining": "0",
             },
         )
 
 
+# ──────────────────────────────────────────────
+# Safe email wrapper 
+# ──────────────────────────────────────────────
+def _safe_send_email(name: str, email: str, message: str, phone: str | None):
+    try:
+        send_contact_email(name, email, message, phone)
+    except Exception as e:
+        # Don't crash background task
+        print("Email failed:", e)
+
+
+# ──────────────────────────────────────────────
+# Endpoint
+# ──────────────────────────────────────────────
 @router.post(
     "",
     response_model=SuccessResponse,
@@ -49,21 +71,12 @@ async def _check_rate_limit(request: Request) -> None:
 async def submit_contact(
     payload: ContactCreate,
     request: Request,
-    background_tasks: BackgroundTasks,  # 🔥 added
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_check_rate_limit),
 ) -> SuccessResponse:
-    """
-    Accept a contact form submission, persist it to PostgreSQL,
-    and return the created record.
-    """
 
-    client_ip = request.headers.get(
-        "X-Forwarded-For",
-        request.client.host if request.client else None
-    )
-    if client_ip:
-        client_ip = client_ip.split(",")[0].strip()
+    client_ip = _get_client_ip(request)
 
     service = ContactService(db)
     submission = await service.create_submission(
@@ -71,9 +84,9 @@ async def submit_contact(
         ip_address=client_ip
     )
 
-    # 🔥 async email (non-blocking)
+    #  non-blocking + safe email
     background_tasks.add_task(
-        send_contact_email,
+        _safe_send_email,
         payload.name,
         payload.email,
         payload.message,
