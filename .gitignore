@@ -56,5 +56,5 @@ logs/
 # ──────────────────────────────────────────────
 # Alembic
 # ──────────────────────────────────────────────
-migrations/versions/*.py
+migrations/versions/
 !migrations/versions/.gitkeep
