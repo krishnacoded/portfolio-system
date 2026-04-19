@@ -60,7 +60,12 @@ class Settings(BaseSettings):
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
+# CORS
+ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
 
+@property
+def cors_origins(self) -> list[str]:
+    return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
