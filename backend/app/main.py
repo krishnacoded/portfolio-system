@@ -47,6 +47,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    print("CORS ORIGINS:", settings.cors_origins)
     # ── Middleware ────────────────────────────────────────────────────────────
 
     app.add_middleware(
