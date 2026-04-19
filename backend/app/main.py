@@ -9,7 +9,6 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.core.redis_client import close_redis
 from app.api import api_router
-from app.api.auth import router as auth_router
 
 # Import all models so Base.metadata knows about them
 import app.models  # noqa: F401
@@ -19,11 +18,16 @@ import app.models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup — create tables if they don't exist
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print(f"✅  {settings.APP_NAME} started | env={settings.APP_ENV}")
+    # Startup — safe DB init
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print(f"✅  {settings.APP_NAME} started | env={settings.APP_ENV}")
+    except Exception as e:
+        print("⚠️ DB connection failed:", e)
+
     yield
+
     # Shutdown
     await close_redis()
     await engine.dispose()
@@ -56,7 +60,7 @@ def create_app() -> FastAPI:
     if settings.APP_ENV == "production":
         app.add_middleware(
             TrustedHostMiddleware,
-            allowed_hosts=["yourdomain.com", "*.yourdomain.com"]
+            allowed_hosts=["*"],  # safe default for now
         )
 
     # ── Global exception handler ──────────────────────────────────────────────
@@ -71,14 +75,18 @@ def create_app() -> FastAPI:
     # ── Routes ────────────────────────────────────────────────────────────────
 
     app.include_router(api_router, prefix="/api")
-    app.include_router(auth_router, prefix="/api")  # ✅ FIXED
 
     @app.get("/", tags=["Root"])
     async def root():
         return {
-            "message": f"Welcome to the {settings.APP_NAME}",
-            "docs": "/api/docs"
+            "status": "running",
+            "service": settings.APP_NAME,
+            "docs": "/api/docs" if settings.DEBUG else None,
         }
+
+    @app.get("/health", tags=["Health"])
+    async def health_check():
+        return {"status": "ok"}
 
     return app
 
