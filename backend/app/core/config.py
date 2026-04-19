@@ -1,19 +1,17 @@
 from functools import lru_cache
-from typing import Optional
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 
 
 class Settings(BaseSettings):
-    # App
     APP_NAME: str = "Portfolio API"
     APP_ENV: str = "development"
     DEBUG: bool = True
 
-    # ✅ Render / Production DB (primary)
+    # Render DB URL
     DATABASE_URL: Optional[str] = None
 
-    # PostgreSQL (fallback for local development)
+    # Local fallback
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_HOST: str = "localhost"
@@ -31,12 +29,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
-    # CORS
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
-
-    # Rate limiting
-    RATE_LIMIT_CONTACT: str = "5/minute"
-
     # SMTP
     SMTP_EMAIL: str = ""
     SMTP_PASSWORD: str = ""
@@ -48,7 +40,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ✅ Async DB URL (used by app)
     @property
     def db_url(self) -> str:
         if self.DATABASE_URL:
@@ -59,7 +50,6 @@ class Settings(BaseSettings):
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
-    # ✅ Sync DB URL (used by Alembic)
     @property
     def db_url_sync(self) -> str:
         if self.DATABASE_URL:
@@ -69,18 +59,6 @@ class Settings(BaseSettings):
             f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
-
-    # Redis URL
-    @property
-    def REDIS_URL(self) -> str:
-        if self.REDIS_PASSWORD:
-            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
-
-    # CORS list
-    @property
-    def cors_origins(self) -> list[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
 
 @lru_cache()
