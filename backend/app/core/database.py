@@ -4,7 +4,7 @@ from app.core.config import settings
 
 # ── Engine ───────────────────────────────────────────────────────────────────
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.db_url,
     echo=settings.DEBUG,
     pool_pre_ping=True,
     pool_size=10,

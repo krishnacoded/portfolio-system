@@ -21,7 +21,7 @@ target_metadata = Base.metadata
 # Use SYNC DB URL for Alembic
 config.set_main_option(
     "sqlalchemy.url",
-    settings.DATABASE_URL_SYNC
+    settings.db_url_sync
 )
 
 

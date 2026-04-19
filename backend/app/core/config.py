@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -9,7 +10,10 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = True
 
-    # PostgreSQL
+    # ✅ Render / Production DB (primary)
+    DATABASE_URL: Optional[str] = None
+
+    # PostgreSQL (fallback for local development)
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_HOST: str = "localhost"
@@ -32,7 +36,7 @@ class Settings(BaseSettings):
 
     # Rate limiting
     RATE_LIMIT_CONTACT: str = "5/minute"
-    
+
     # SMTP
     SMTP_EMAIL: str = ""
     SMTP_PASSWORD: str = ""
@@ -44,27 +48,36 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # ✅ Async DB URL (used by app)
     @property
-    def DATABASE_URL(self) -> str:
+    def db_url(self) -> str:
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
+
         return (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
+    # ✅ Sync DB URL (used by Alembic)
     @property
-    def DATABASE_URL_SYNC(self) -> str:
-        """Sync URL for Alembic migrations."""
+    def db_url_sync(self) -> str:
+        if self.DATABASE_URL:
+            return self.DATABASE_URL.replace("+asyncpg", "")
+
         return (
             f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
+    # Redis URL
     @property
     def REDIS_URL(self) -> str:
         if self.REDIS_PASSWORD:
             return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
+    # CORS list
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
